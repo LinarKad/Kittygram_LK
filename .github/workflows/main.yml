@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   # Этап 0: Проверка кода на соответствие PEP8
