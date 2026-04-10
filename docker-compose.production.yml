@@ -1,0 +1,49 @@
+version: '3.8'
+
+volumes:
+  pg_data:
+  static:
+  media:
+
+services:
+  postgres:
+    image: postgres:13.10
+    env_file: .env
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    image: ${DOCKERHUB_USER:-username}/kittygram_backend:latest
+    env_file: .env
+    volumes:
+      - static:/backend_static/static/
+      - media:/app/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    image: ${DOCKERHUB_USER:-username}/kittygram_frontend:latest
+    env_file: .env
+    volumes:
+      - static:/app/build
+
+  gateway:
+    image: ${DOCKERHUB_USER:-username}/kittygram_gateway:latest
+    ports:
+      - "80:80"
+    volumes:
+      - static:/static
+      - media:/media
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      default:
+        aliases:
+          - kittygram.local
