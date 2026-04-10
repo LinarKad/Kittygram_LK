@@ -1,0 +1,128 @@
+# Файл main.yml
+# Имя workflow:
+name: Main Workflow
+# Перечень событий-триггеров, при которых должен запускаться workflow:
+on:
+  # Событие push возникает,
+  # когда изменения исходного кода приходят на сервер GitHub.
+  push:
+    # Отслеживаем изменения только в ветке main:
+    branches:
+      - main
+# Перечень задач
+jobs:
+  # Единственная задача — склонировать код 
+  # и вывести в консоль дерево файлов.
+  checkout-and-print-tree:
+    runs-on: ubuntu-latest
+    steps:
+      # На GitHub Actions есть готовые описания шагов, 
+      # их можно использовать в своих workflow.
+      # Применим готовое описание шага для получения исходного кода:
+      - name: Check out repository code  # Имя шага задаём сами.
+        uses: actions/checkout@v3  # Берём готовое решение из библиотеки GitHub Actions.
+      # Выполняем команду tree в текущей директории:
+      - name: Print project tree
+        run: tree .
+
+  # Добавляем новую задачу: деплой приложения:
+  build_and_push_to_docker_hub:
+    name: Push Docker image to DockerHub
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        # Получение исходного кода из репозитория:
+        uses: actions/checkout@v3
+      - name: Set up Docker Buildx
+        # Установка сборщика контейнеров Docker:
+        uses: docker/setup-buildx-action@v2
+      - name: Login to Docker 
+        # Авторизация на Docker Hub:
+        uses: docker/login-action@v2
+        # При помощи with передаём в action параметры username и password:
+        with:
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+          # Хорошо ли держать логин и пароль прямо в коде workflow?
+          # Нет, это нехорошо. Хранить пароль надо в Secrets.
+      - name: Push to DockerHub
+        # Одновременный билд и пуш образа в Docker Hub:
+        uses: docker/build-push-action@v4
+        with:
+          # Параметр context: ./backend/ указывает, что нужный Dockerfile 
+          # находится в ./backend/
+          context: ./backend/
+          # Параметр push: true указывает, что образ нужно не только собрать,
+          # но и отправить на Docker Hub:
+          push: true
+          # В параметре tags задаётся название и тег для образа.
+          # Для каждого пересобранного образа 
+          # устанавливаем тег latest, чтобы потом
+          # на сервере и в docker-compose.yml не указывать версию образа:
+          tags: ${{ secrets.DOCKERHUB_USER }}/kittygram_backend:latest
+
+  build_frontend_and_push_to_docker_hub:
+    name: Push Docker image to DockerHub
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        # Получение исходного кода из репозитория:
+        uses: actions/checkout@v3
+      - name: Set up Docker Buildx
+        # Установка сборщика контейнеров Docker:
+        uses: docker/setup-buildx-action@v2
+      - name: Login to Docker 
+        # Авторизация на Docker Hub:
+        uses: docker/login-action@v2
+        # При помощи with передаём в action параметры username и password:
+        with:
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+          # Хорошо ли держать логин и пароль прямо в коде workflow?
+          # Нет, это нехорошо. Хранить пароль надо в Secrets.
+      - name: Push to DockerHub
+        # Одновременный билд и пуш образа в Docker Hub:
+        uses: docker/build-push-action@v4
+        with:
+          context: ./frontend/
+          # Параметр push: true указывает, что образ нужно не только собрать,
+          # но и отправить на Docker Hub:
+          push: true
+          # В параметре tags задаётся название и тег для образа.
+          # Для каждого пересобранного образа 
+          # устанавливаем тег latest, чтобы потом
+          # на сервере и в docker-compose.yml не указывать версию образа:
+          tags: ${{ secrets.DOCKERHUB_USER }}/kittygram_frontend:latest
+  
+  build_gateway_and_push_to_docker_hub:
+    name: Push Docker image to DockerHub
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        # Получение исходного кода из репозитория:
+        uses: actions/checkout@v3
+      - name: Set up Docker Buildx
+        # Установка сборщика контейнеров Docker:
+        uses: docker/setup-buildx-action@v2
+      - name: Login to Docker 
+        # Авторизация на Docker Hub:
+        uses: docker/login-action@v2
+        # При помощи with передаём в action параметры username и password:
+        with:
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+          # Хорошо ли держать логин и пароль прямо в коде workflow?
+          # Нет, это нехорошо. Хранить пароль надо в Secrets.
+      - name: Push to DockerHub
+        # Одновременный билд и пуш образа в Docker Hub:
+        uses: docker/build-push-action@v4
+        with:
+          context: ./nginx/
+          # Параметр push: true указывает, что образ нужно не только собрать,
+          # но и отправить на Docker Hub:
+          push: true
+          # В параметре tags задаётся название и тег для образа.
+          # Для каждого пересобранного образа 
+          # устанавливаем тег latest, чтобы потом
+          # на сервере и в docker-compose.yml не указывать версию образа:
+          tags: ${{ secrets.DOCKERHUB_USER }}/kittygram_gateway:latest
