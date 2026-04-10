@@ -17,14 +17,6 @@ dockerhub_username: ваш_логин_на_докерхабе
 
 Для локального запуска тестов создайте виртуальное окружение, установите в него зависимости из backend/requirements.txt и запустите в корневой директории проекта `pytest`.
 
-```sh
-docker run --rm -it \
-  --network "cloud-services-engineer-kittygram-final_default" \
-  -v "$(pwd)":/workspace \
-  -w /workspace \
-  python:3.9 \
-  bash -c "pip install --upgrade pip && pip install -r backend/requirements.txt && pytest -q"
-```
 
 ## Чек-лист для проверки перед отправкой задания
 
