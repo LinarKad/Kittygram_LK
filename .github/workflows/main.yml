@@ -135,14 +135,14 @@ jobs:
     steps:
     - name: Checkout repo
       uses: actions/checkout@v3
-    - name: Copy docker-compose.yml via ssh
+    - name: Copy production compose file via ssh
       uses: appleboy/scp-action@master
       with:
         host: ${{ secrets.HOST }}
         username: ${{ secrets.USER }}
         key: ${{ secrets.SSH_KEY }}
-        source: "docker-compose.yml"
-        target: "kittygram"
+        source: "docker-compose.production.yml"
+        target: "kittygram/docker-compose.production.yml"
     - name: Executing remote ssh commands to deploy
       uses: appleboy/ssh-action@master
       with:
@@ -151,11 +151,11 @@ jobs:
         key: ${{ secrets.SSH_KEY }}
         script: |
           cd kittygram
-          sudo docker compose pull
-          sudo docker compose down
-          sudo docker compose up -d
-          sudo docker compose exec -T backend python manage.py migrate
-          sudo docker compose exec -T backend python manage.py collectstatic --noinput
+          sudo docker compose -f docker-compose.production.yml pull
+          sudo docker compose -f docker-compose.production.yml down
+          sudo docker compose -f docker-compose.production.yml up -d
+          sudo docker compose -f docker-compose.production.yml exec -T backend python manage.py migrate
+          sudo docker compose -f docker-compose.production.yml exec -T backend python manage.py collectstatic --noinput
     - name: Send Telegram notification
       uses: appleboy/telegram-action@master
       with:
