@@ -20,27 +20,30 @@ services:
       retries: 5
 
   backend:
-    image: ${DOCKERHUB_USER:-username}/kittygram_backend:latest
+    build: ./backend
+    image: ${DOCKERHUB_USER}/kittygram_backend
     env_file: .env
     volumes:
-      - static:/app/staticfiles
+      - static:/app/static_files
       - media:/app/media
     depends_on:
       postgres:
         condition: service_healthy
 
   frontend:
-    image: ${DOCKERHUB_USER:-username}/kittygram_frontend:latest
+    build: ./frontend
+    image: ${DOCKERHUB_USER}/kittygram_frontend
     env_file: .env
     volumes:
       - static:/app/build
 
   gateway:
-    image: ${DOCKERHUB_USER:-username}/kittygram_gateway:latest
+    build: ./nginx
+    image: ${DOCKERHUB_USER}/kittygram_gateway
     ports:
       - "80:80"
     volumes:
-      - static:/backend_static/static
+      - static:/static_files/  # Монтируем корень тома в отдельную папку
       - media:/media
     depends_on:
       - backend
