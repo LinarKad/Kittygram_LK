@@ -1,0 +1,234 @@
+# GitHub Actions Workflow для автоматизации тестирования, сборки и развертывания
+name: Main Workflow
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  # Этап 0: Проверка кода на соответствие PEP8
+  check_pep8:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11']
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v3
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install flake8
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8
+    - name: Check PEP8 compliance
+      continue-on-error: true
+      run: |
+        flake8 backend/ --max-line-length=120 --exclude=migrations
+  
+  # Этап 1: Тестирование кода
+  tests:
+    runs-on: ubuntu-latest
+    needs: check_pep8
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11']
+    env:
+      SECRET_KEY: django-insecure-test-key-for-ci
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v3
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install backend dependencies
+      run: |
+        python -m pip install --upgrade pip 
+        pip install -r backend/requirements.txt
+    - name: Run backend tests with pytest
+      run: pytest tests/ -v
+    - name: Set up Node.js for frontend tests
+      uses: actions/setup-node@v3
+      with:
+        node-version: '16'
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        npm install
+    - name: Run frontend tests
+      run: |
+        cd frontend
+        npm test -- --watchAll=false --passWithNoTests
+
+  # Этап 2: Построение и пуш backend образа
+  build_and_push_backend:
+    name: Push backend Docker image to DockerHub
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      - name: Login to Docker 
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      - name: Push backend to DockerHub
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend/
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USER }}/kittygram_backend:latest
+
+  # Этап 2: Построение и пуш frontend образа
+  build_and_push_frontend:
+    name: Push frontend Docker image to DockerHub
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      - name: Login to Docker 
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      - name: Push frontend to DockerHub
+        uses: docker/build-push-action@v4
+        with:
+          context: ./frontend/
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USER }}/kittygram_frontend:latest
+
+  # Этап 2: Построение и пуш gateway (nginx) образа
+  build_and_push_gateway:
+    name: Push gateway Docker image to DockerHub
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      - name: Login to Docker 
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      - name: Push gateway to DockerHub
+        uses: docker/build-push-action@v4
+        with:
+          context: ./nginx/
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USER }}/kittygram_gateway:latest
+
+  # Этап 3: Развертывание на сервер
+  deploy:
+    runs-on: ubuntu-latest
+    needs: 
+      - build_and_push_backend
+      - build_and_push_frontend
+      - build_and_push_gateway
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v3
+    - name: Prepare remote directory and .env
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USER }}
+        key: ${{ secrets.SSH_KEY }}
+        script: |
+          mkdir -p kittygram
+          cat > kittygram/.env <<'EOF'
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          DB_HOST=postgres
+          DB_PORT=5432
+          SECRET_KEY=${{ secrets.SECRET_KEY }}
+          DOCKERHUB_USER=${{ secrets.DOCKERHUB_USER }}
+          EOF
+    - name: Copy production compose file via ssh
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USER }}
+        key: ${{ secrets.SSH_KEY }}
+        source: "docker-compose.production.yml"
+        target: "kittygram/"
+    - name: Executing remote ssh commands to deploy
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USER }}
+        key: ${{ secrets.SSH_KEY }}
+        script: |
+          cd kittygram
+          sudo docker compose -f docker-compose.production.yml pull
+          sudo docker compose -f docker-compose.production.yml down
+          sudo docker compose -f docker-compose.production.yml up -d
+          sudo docker compose -f docker-compose.production.yml exec -T backend python manage.py migrate
+          sudo docker compose -f docker-compose.production.yml exec -T backend python manage.py collectstatic --noinput
+    - name: Send Telegram notification
+      uses: appleboy/telegram-action@master
+      with:
+        to: ${{ secrets.TELEGRAM_CHAT_ID }}
+        token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        message: |
+          ✅ Deployment completed successfully!
+          
+          👤 Author: ${{ github.actor }}
+          📝 Commit: ${{ github.event.commits[0].message }}
+          🔗 Commit: https://github.com/${{ github.repository }}/commit/${{ github.sha }}
+          
+          🐳 Images:
+          Backend: ${{ secrets.DOCKERHUB_USER }}/kittygram_backend:latest
+          Frontend: ${{ secrets.DOCKERHUB_USER }}/kittygram_frontend:latest
+          Gateway: ${{ secrets.DOCKERHUB_USER }}/kittygram_gateway:latest
+
+  # Этап 4: Автотесты после развертывания
+  post_deploy_tests:
+    runs-on: ubuntu-latest
+    needs: deploy
+    env:
+      SECRET_KEY: django-insecure-test-key-for-ci
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.9
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip 
+        pip install -r backend/requirements.txt
+        pip install requests
+    - name: Run post-deployment tests
+      env:
+        TEST_SERVER_HOST: ${{ secrets.HOST }}
+      run: |
+        pytest tests/ -v
+    - name: Send Telegram notification on test completion
+      if: always()
+      uses: appleboy/telegram-action@master
+      with:
+        to: ${{ secrets.TELEGRAM_CHAT_ID }}
+        token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        message: |
+          ${{ job.status == 'success' && '✅' || '❌' }} Post-deployment tests completed!
+          Status: ${{ job.status }}
+          
+          👤 Author: ${{ github.actor }}
+          📝 Commit: ${{ github.event.commits[0].message }}
+          🔗 Commit: https://github.com/${{ github.repository }}/commit/${{ github.sha }}
