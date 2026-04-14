@@ -23,7 +23,7 @@ services:
     image: ${DOCKERHUB_USER:-username}/kittygram_backend:latest
     env_file: .env
     volumes:
-      - static:/backend_static/static/
+      - static:/app/staticfiles
       - media:/app/media
     depends_on:
       postgres:
@@ -40,7 +40,7 @@ services:
     ports:
       - "80:80"
     volumes:
-      - static:/static
+      - static:/backend_static/static
       - media:/media
     depends_on:
       - backend
