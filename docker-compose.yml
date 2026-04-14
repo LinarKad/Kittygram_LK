@@ -7,16 +7,20 @@ services:
   postgres:
     image: postgres:13.10
     env_file: .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   backend:
-    build: ./backend/
+    image: ${DOCKERHUB_USER:-username}/kittygram_backend:latest
     env_file: .env
     volumes:
       - static:/backend_static/static/
@@ -26,13 +30,13 @@ services:
         condition: service_healthy
 
   frontend:
+    image: ${DOCKERHUB_USER:-username}/kittygram_frontend:latest
     env_file: .env
-    build: ./frontend/
     volumes:
       - static:/app/build
 
   gateway:
-    build: ./nginx/
+    image: ${DOCKERHUB_USER:-username}/kittygram_gateway:latest
     ports:
       - "80:80"
     volumes:

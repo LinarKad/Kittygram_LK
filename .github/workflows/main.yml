@@ -178,11 +178,13 @@ jobs:
         key: ${{ secrets.SSH_KEY }}
         script: |
           cd kittygram
-          sudo docker compose -f docker-compose.production.yml pull
           sudo docker compose -f docker-compose.production.yml down
+          sudo docker compose -f docker-compose.production.yml pull
           sudo docker compose -f docker-compose.production.yml up -d
+          sleep 10
           sudo docker compose -f docker-compose.production.yml exec -T backend python manage.py migrate
           sudo docker compose -f docker-compose.production.yml exec -T backend python manage.py collectstatic --noinput
+          sudo docker image prune -f
     - name: Send Telegram notification
       uses: appleboy/telegram-action@master
       with:
